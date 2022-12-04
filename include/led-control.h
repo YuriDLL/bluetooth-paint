@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <list>
 
-#define NUM_LED 8
+#define NUM_LED 106
 #define TIC_IN_SEC 10
 
 enum
@@ -18,6 +18,7 @@ typedef struct effect_settings_t
 {
     uint8_t type;
     float period;
+    uint8_t chance_per_sec;
     uint32_t color1;
     uint32_t color2;
 }effect_settings_t;

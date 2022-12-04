@@ -10,6 +10,13 @@ typedef struct float_rgb_t
     float blue;
 } float_rgb_t;
 
+typedef struct led_param_t
+{
+    int num;
+    float_rgb_t color;
+    bool is_on;
+} led_param_t;
+
 static CRGB leds[NUM_LED];
 static bool is_init = false;
 
@@ -102,7 +109,80 @@ private:
     float red_scale, green_scale, blue_scale;
 };
 
+class RandomEffect : public Effect
+{
+public:
+    RandomEffect(std::list<int> new_leds, effect_settings_t settings)
+    {
+        color = {
+            .red= (float)CRGB(settings.color1).red,
+            .green= (float)CRGB(settings.color1).green,
+            .blue= (float)CRGB(settings.color1).blue,
+        };
+        for (led_param_t *led: led_colors)
+        {
+            delete led;
+        }
+        led_colors.clear();
 
+        for (int num : new_leds)
+        {
+            led_colors.push_front(new (led_param_t){
+                .num = num,
+                .color = (float_rgb_t){0},
+                .is_on = false,
+            });
+        }
+        on_chance = pow((1.0f - settings.chance_per_sec * 0.01f), TIC_IN_SEC);
+        unsigned int tic_in_period = settings.period * TIC_IN_SEC;
+        red_scale = - color.red / (float)tic_in_period;
+        green_scale = - color.green / (float)tic_in_period;
+        blue_scale = - color.blue / (float)tic_in_period;
+    }
+
+    void fill_array()
+    {
+        for (led_param_t *i : led_colors)
+        {
+            if (!i->is_on)
+            {
+                if(random(100) < on_chance)
+                {
+                    i->is_on = true;
+                    i->color = color;
+
+                }
+            }
+            else
+            {
+
+                i->color.red += red_scale;
+                i->color.red = i->color.red < 0 ? 0: i->color.red;
+                i->color.green += green_scale;
+                i->color.green = i->color.green < 0 ? 0: i->color.green;
+                i->color.blue += blue_scale;
+                i->color.blue = i->color.blue < 0 ? 0: i->color.blue;
+
+                const float minimum_value = 1.0f;
+                if (i->color.red < minimum_value &&
+                    i->color.green < minimum_value &&
+                    i->color.blue < minimum_value)
+                {
+                    i->is_on = false;
+                    i->color = (float_rgb_t) {0, 0, 0};
+                }
+            }
+            leds[i->num] = CRGB(i->color.red, i->color.green, i->color.blue);
+        }
+    }
+
+private:
+    std::list<led_param_t*> led_colors;
+    float_rgb_t color;
+    int on_chance = 10;
+
+    float red_scale, green_scale, blue_scale;
+};
 
 LEDZone::LEDZone()
 {
@@ -146,6 +226,10 @@ void LEDZone::set_effect(effect_settings_t settings)
     else if (settings.type == EFFECT_GRADIENT)
     {
         effect = new GradientEffect(led_numbers, settings);
+    }
+    else if (settings.type == EFFECT_RANDOM)
+    {
+        effect = new RandomEffect(led_numbers, settings);
     }
 }
 
