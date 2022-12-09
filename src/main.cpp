@@ -1,5 +1,4 @@
 #include "NimBLEDevice.h"
-#include <SPI.h>
 #include "led-control.h"
 
 enum
@@ -13,13 +12,16 @@ enum
 
 static LEDZone *zones[ZONE_COUNT];
 
-static const NimBLEUUID eye_service = NimBLEUUID("c68d68c0-4295-4f89-b48d-9a2a2979121b");
-static const NimBLEUUID hair_service = NimBLEUUID("a3e220db-7b8e-4ccb-89b9-4ce4fc7d5f1a");
-static const NimBLEUUID amulet_service = NimBLEUUID("44259e34-4b1d-4ce6-92e7-b5830bfbb16b");
-static const NimBLEUUID background_service = NimBLEUUID("f9b5b172-7dab-4882-9dea-efcfa7c5c89f");
+static const NimBLEUUID zones_uuids[ZONE_COUNT] = {
+    NimBLEUUID("c68d68c0-4295-4f89-b48d-9a2a2979121b"), // ZONE_EYE
+    NimBLEUUID("a3e220db-7b8e-4ccb-89b9-4ce4fc7d5f1a"), // ZONE_HAIR
+    NimBLEUUID("44259e34-4b1d-4ce6-92e7-b5830bfbb16b"), // ZONE_AMULET
+    NimBLEUUID("f9b5b172-7dab-4882-9dea-efcfa7c5c89f") // ZONE_BACKGROUND
+};
 
 static const NimBLEUUID effect_char = NimBLEUUID("2bfe8422-fce0-4c99-b503-48106286d7a2");
 static const NimBLEUUID period_char = NimBLEUUID("cd51666b-364a-45e8-be5c-bae24b4e6a8c");
+static const NimBLEUUID chance_per_sec_char = NimBLEUUID("010666bd-da27-4a45-8dd4-dcefef51a4ec");
 static const NimBLEUUID color1_char = NimBLEUUID("7fbe55ad-2ab9-47e4-961e-de6d1afb81b2");
 static const NimBLEUUID color2_char = NimBLEUUID("626e6dce-6a0a-49e6-a704-1a21d8362fcb");
 
@@ -51,22 +53,14 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
     LEDZone *get_zone(NimBLEUUID service_uuid)
     {
         uint8_t zone_index = ZONE_EYE;
-        if (service_uuid.equals(eye_service))
+        for (int i=0; i < ZONE_COUNT; i++)
         {
-            zone_index = ZONE_EYE;
+            if (service_uuid.equals(zones_uuids[i]))
+            {
+                zone_index = i;
+            }
         }
-        else if (service_uuid.equals(hair_service))
-        {
-            zone_index = ZONE_HAIR;
-        }
-        else if (service_uuid.equals(amulet_service))
-        {
-            zone_index = ZONE_AMULET;
-        }
-        else if (service_uuid.equals(background_service))
-        {
-            zone_index = ZONE_BACKGROUND;
-        }
+
         return zones[zone_index];
     }
 };
@@ -98,36 +92,29 @@ void setup()
     NimBLEDevice::init("Paint");
 
     NimBLEServer *pServer = NimBLEDevice::createServer();
-    NimBLEService *pService[4];
-    pService[0] = pServer->createService(eye_service);
-    pService[1] = pServer->createService(hair_service);
-    pService[2] = pServer->createService(amulet_service);
-    pService[3] = pServer->createService(background_service);
-
     for (uint8_t i = 0; i < 4; i++)
     {
+        NimBLEService *pService = pServer->createService(zones_uuids[i]);
         NimBLECharacteristic *pCharacteristic;
-        pCharacteristic = pService[i]->createCharacteristic(effect_char, NIMBLE_BLE_ATT_CLT_READ | NIMBLE_BLE_ATT_CLT_WRITE, 1);
-        pCharacteristic->setValue(0);
+        pCharacteristic = pService->createCharacteristic(effect_char, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE, 1);
         pCharacteristic->setCallbacks(&chrCallbacks);
 
-        pCharacteristic = pService[i]->createCharacteristic(period_char, NIMBLE_BLE_ATT_CLT_READ | NIMBLE_BLE_ATT_CLT_WRITE, 1);
-        pCharacteristic->setValue(0);
+        pCharacteristic = pService->createCharacteristic(period_char, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE, 2);
         pCharacteristic->setCallbacks(&chrCallbacks);
 
-        pCharacteristic = pService[i]->createCharacteristic(color1_char, NIMBLE_BLE_ATT_CLT_READ | NIMBLE_BLE_ATT_CLT_WRITE, 3);
-        pCharacteristic->setValue(0);
+        pCharacteristic = pService->createCharacteristic(chance_per_sec_char, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE, 1);
         pCharacteristic->setCallbacks(&chrCallbacks);
 
-        pCharacteristic = pService[i]->createCharacteristic(color2_char, NIMBLE_BLE_ATT_CLT_READ | NIMBLE_BLE_ATT_CLT_WRITE, 3);
-        pCharacteristic->setValue(0);
+        pCharacteristic = pService->createCharacteristic(color1_char, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE, 3);
         pCharacteristic->setCallbacks(&chrCallbacks);
 
-        pService[i]->start();
+        pCharacteristic = pService->createCharacteristic(color2_char, NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE, 3);
+        pCharacteristic->setCallbacks(&chrCallbacks);
+
+        pService->start();
     }
 
     NimBLEAdvertising *pAdvertising = NimBLEDevice::getAdvertising();
-    pAdvertising->addServiceUUID(eye_service);
     pAdvertising->start();
 }
 
