@@ -58,6 +58,7 @@ static const char *settings_name[ZONE_COUNT] =
 static void load_settings(effect_settings_t settings[ZONE_COUNT]);
 static void save_setting(effect_settings_t setting, uint8_t zone_indx);
 static void *get_char_p(effect_settings_t *setting, uint8_t char_indx);
+static void print_setting(effect_settings_t setting, uint8_t zone_id);
 
 /** Handler class for characteristic actions */
 class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
@@ -68,14 +69,25 @@ class CharacteristicCallbacks : public NimBLECharacteristicCallbacks
         LEDZone *zone = zones[zone_indx];
         effect_settings_t settings = zone->get_effect_settings();
 
-        for (int i = 0; i < CHAR_COUNT; i++)
+        if (pCharacteristic->getUUID().equals(char_uuids[CHAR_PERIOD]))
         {
-            if (pCharacteristic->getUUID().equals(char_uuids[i]))
+            const uint8_t *bytes;
+            bytes = pCharacteristic->getValue().data();
+            settings.period = bytes[0];
+            settings.period += bytes[1] / 256;
+        }
+        else
+        {
+            for (int i = 0; i < CHAR_COUNT; i++)
             {
-                memcpy(get_char_p(&settings, i), pCharacteristic->getValue().data(), char_len[i]);
+                if (pCharacteristic->getUUID().equals(char_uuids[i]))
+                {
+                    memcpy(get_char_p(&settings, i), pCharacteristic->getValue().data(), char_len[i]);
+                }
             }
         }
 
+        print_setting(settings, zone_indx);
         save_setting(settings, zone_indx);
         zone->set_effect(settings);
     }
@@ -133,8 +145,16 @@ void setup()
         {
             NimBLECharacteristic *pCharacteristic;
             pCharacteristic = pService->createCharacteristic(char_uuids[char_i], NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::WRITE, char_len[char_i]);
-            pCharacteristic->setValue((uint8_t *)get_char_p(&settings[i], char_i), char_len[char_i]);
-            pCharacteristic->setCallbacks(&chrCallbacks);
+            if (pCharacteristic->getUUID().equals(char_uuids[CHAR_PERIOD]))
+            {
+                uint8_t fix_point_period[2] = {(uint8_t)settings[i].period, (uint8_t)(settings[i].period * 255)};
+                pCharacteristic->setValue(fix_point_period, 2);
+            }
+            else
+            {
+                pCharacteristic->setValue((uint8_t *)get_char_p(&settings[i], char_i), char_len[char_i]);
+                pCharacteristic->setCallbacks(&chrCallbacks);
+            }
         }
 
         pService->start();
@@ -178,7 +198,6 @@ static void load_settings(effect_settings_t settings[ZONE_COUNT])
 
 static void save_setting(effect_settings_t setting, uint8_t zone_indx)
 {
-    Serial.printf("char %s.type=%d", settings_name[zone_indx], setting.type);
     prefs.putBytes(settings_name[zone_indx], &setting, sizeof(effect_settings_t));
 }
 
@@ -205,4 +224,14 @@ static void *get_char_p(effect_settings_t *setting, uint8_t char_indx)
         return &setting->color2;
     }
     return NULL;
+}
+
+static void print_setting(effect_settings_t setting, uint8_t zone_id)
+{
+    Serial.printf("Setting of zone=%s\n", settings_name[zone_id]);
+    Serial.printf("type=%d\n", setting.type);
+    Serial.printf("period=%f\n", setting.period);
+    Serial.printf("chance_per_sec=%d\n", setting.chance_per_sec);
+    Serial.printf("color1=(r%d\t;g%d\t;b%d)\n", (setting.color1 >> 16) & 0xff, (setting.color1 >> 8) & 0xff, setting.color1 & 0xff);
+    Serial.printf("color2=(r%d\t;g%d\t;b%d)\n", (setting.color2 >> 16) & 0xff, (setting.color2 >> 8) & 0xff, setting.color2 & 0xff);
 }
